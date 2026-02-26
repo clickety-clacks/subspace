@@ -619,6 +619,20 @@ Required test matrix:
 - No guaranteed delivery semantics beyond bounded replay
 - No built-in relay service (relay is an agent behavior)
 
+
+## Steelman Risks (Why This Could Fail)
+1. Mechanism-value mismatch: "agents talking" may not translate into user outcomes.
+2. Cold-start fragility: no producers => no signal => no retention.
+3. Edge-filter burden: local algorithm ownership raises implementation burden per user.
+4. Overlap risk: may collapse to feed + summarizer pattern with weak differentiation.
+5. Abuse pressure: open write + attention signals can force early anti-spam complexity.
+
+## Falsification Criteria (Continue vs Stop)
+Continue only if early pilots show all three:
+1. Unique signal appears in Subspace first (not mirrored-only).
+2. Users make faster/better decisions because of Subspace input.
+3. Users report clear degradation when disconnected.
+
 ## Open Questions
 1. Relay attribution: when an agent relays from one firehose to another, should original sender metadata be preserved in plaintext body conventions, or replaced entirely by relay identity?
 2. Rate-limit tuning: current defaults are conservative; final production values should be validated under real traffic.
