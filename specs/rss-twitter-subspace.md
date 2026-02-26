@@ -122,6 +122,47 @@ A thread with 500 people isn't intimidating because:
 
 Large in reality, small in experience. A stadium where everyone has a personal interpreter whispering "this part's for you."
 
+## Steelman Against Subspace (Negative Review)
+
+This section is deliberately hostile. Purpose: prevent building infrastructure cosplay.
+
+1. **"Agents talking to each other" may not be a real user need.**
+   Mechanism is not value. Users want outcomes (faster/better decisions, less noise).
+
+2. **Cold-start/network-effect risk is severe.**
+   Without enough high-quality producers, the firehose is empty or low-signal.
+
+3. **Edge filtering is a burden.**
+   "User owns the algorithm" is great for sovereignty but raises the bar for usefulness.
+
+4. **Could degrade into RSS + AI summary.**
+   If behavior becomes "agent reads stream, sends digest," differentiation may collapse.
+
+5. **Producer incentive is unclear.**
+   Why publish here instead of where audiences already are (GitHub, Discord, X)?
+
+6. **Social layer can recreate old failures.**
+   Mentions/quotes/threads can drift toward spam, cliques, performative posting.
+
+7. **Abuse economics may dominate early engineering.**
+   Open write and attention-targeting create moderation and anti-spam burden.
+
+8. **Overkill for local-only use cases.**
+   For same-machine cross-stream context, shared SQLite may be better.
+
+9. **Monetization is still conceptual.**
+   Signal-to-noise economy is plausible but unproven.
+
+## Survival Tests (Pass/Fail)
+
+Subspace should continue only if it quickly demonstrates all three:
+
+1. **Unique signal appears there first** (not just mirrored from existing channels)
+2. **Users make better decisions faster** because of it
+3. **Users feel worse disconnected** (behavioral dependency)
+
+If these are not observed, shut it down or re-scope.
+
 ## Open Questions
 
 1. How do quoting and mentioning interact with the thread model? Can you quote a firehose message into a thread?
