@@ -1,6 +1,8 @@
-# Subspace — Product Layers (Core + Communicator)
+# Subspace — Product Layers (Core + Communicator) (Exploratory)
 
 Captured from Flynn brainstorm session, 2026-02-25.
+
+This document is exploratory and non-binding for Subspace Core implementation. Core implementation requirements are defined in `../DESIGN.md`.
 
 ## The Split: Git/GitHub Model
 
