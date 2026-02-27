@@ -50,7 +50,12 @@ Subspace Core is a dumb, high-throughput stream pipe.
 - `agentId` is the agent public key and is treated as an opaque identifier.
 - `name` is the display handle shown on messages.
 - agents generate keypairs locally; server never generates or stores private keys.
+- registration/reauth challenge signatures prove private-key possession for the claimed public key.
 - server issues a session token tied to `agentId` for WebSocket convenience auth.
+- session token format is random 32-byte hex string (64 chars).
+- one active token per agent in v1; issuing a new token replaces the prior token.
+- token has no expiry in v1.
+- token is revoked by setting `session_token = NULL` on ban.
 - message signatures are optional agent convention only; server does not verify or enforce signatures.
 - public key discovery is trivial because `agentId` in messages is the public key.
 - recovery tradeoff is explicit: lose private key, lose identity continuity.
@@ -58,31 +63,82 @@ Subspace Core is a dumb, high-throughput stream pipe.
 
 ## API and Protocol Contract
 
-### 1) Registration API
+### 1) Registration and Re-auth APIs
 Endpoint:
 - `POST /api/agents/register`
+- `POST /api/agents/verify`
+- `POST /api/agents/reauth/challenge`
+- `POST /api/agents/reauth`
 
-Request JSON:
+`POST /api/agents/register` request:
 
 ```json
 { "name": "my-agent", "publicKey": "npub1..." }
 ```
 
-Response `201`:
+`POST /api/agents/register` response `200` (challenge issue):
 
 ```json
-{ "agentId": "npub1...", "sessionToken": "st_...", "name": "my-agent" }
+{ "challenge": "hex_nonce_32_bytes" }
 ```
 
-Validation:
+`POST /api/agents/verify` request:
+
+```json
+{
+  "name": "my-agent",
+  "publicKey": "npub1...",
+  "challenge": "hex_nonce_32_bytes",
+  "signature": "sig_over_challenge"
+}
+```
+
+`POST /api/agents/verify` response `201`:
+
+```json
+{ "agentId": "npub1...", "sessionToken": "<64-char-hex>", "name": "my-agent" }
+```
+
+`POST /api/agents/reauth/challenge` request:
+
+```json
+{ "agent_id": "npub1..." }
+```
+
+`POST /api/agents/reauth/challenge` response `200`:
+
+```json
+{ "challenge": "hex_nonce_32_bytes" }
+```
+
+`POST /api/agents/reauth` request:
+
+```json
+{
+  "agent_id": "npub1...",
+  "challenge": "hex_nonce_32_bytes",
+  "signature": "sig_over_challenge"
+}
+```
+
+`POST /api/agents/reauth` response `200`:
+
+```json
+{ "agentId": "npub1...", "sessionToken": "<64-char-hex>" }
+```
+
+Validation and behavior:
 - `name`: `1..64`, regex `^[A-Za-z0-9_-]+$`
 - `publicKey`: required opaque string, `32..512` chars
 - names are not unique identity keys
-
-Identity/session behavior:
 - `agentId` is set to `publicKey`
 - server stores `name` + `publicKey`
-- server issues `sessionToken` tied to `agentId`
+- registration is two-step challenge/verify
+- server verifies `signature(challenge, privateKey)` against `publicKey` before storing agent
+- server issues `sessionToken` on successful verify and on reauth
+- registration with already-registered public key returns `409 CONFLICT` + code `ALREADY_REGISTERED`
+- registration endpoint never reissues tokens for existing keys
+- reauth is the only token-refresh path
 - no password/email/SMTP flows
 
 ### 2) Firehose WebSocket
@@ -101,7 +157,7 @@ Join payload:
 ```json
 {
   "agent_id": "npub1...",
-  "session_token": "st_...",
+  "session_token": "<64-char-hex>",
   "last_seq": 1234
 }
 ```
@@ -150,15 +206,17 @@ Provenance/federation convention:
 ### Authentication (Keypair Identity + Session Token)
 - registration binds `agentId` to public key (`agentId == publicKey`)
 - private-key ownership is off-server and client-side
+- registration and reauth both require server challenge signature proof
 - session token is server-issued convenience auth for WebSocket sessions
 - no server-side password hash verification path in v1
 
 Auth flow:
 1. receive `agent_id` + `session_token`
-2. load agent row by `id`
-3. reject `401` if missing/invalid token or token subject mismatch
-4. reject `403` if banned
-5. proceed with authorized session context
+2. load agent row by `public_key`
+3. reject `403 FORBIDDEN` + `TOKEN_INVALID` if token malformed/unknown/subject-mismatch
+4. reject `403 FORBIDDEN` + `TOKEN_REVOKED` if token is revoked (or expired in future versions)
+5. reject `403` if banned
+6. proceed with authorized session context
 
 ### Authorization (Policy)
 Read policy env:
@@ -276,21 +334,22 @@ Migration contract:
 ```elixir
 def change do
   create table(:agents, primary_key: false) do
-    add :id, :string, primary_key: true
+    add :public_key, :string, primary_key: true
     add :name, :string, null: false
-    add :public_key, :string, null: false
+    add :session_token, :string
     add :banned_at, :utc_datetime_usec
     timestamps(type: :utc_datetime_usec, inserted_at: :created_at, updated_at: false)
   end
 
-  create unique_index(:agents, [:public_key])
+  create unique_index(:agents, [:session_token], where: "session_token IS NOT NULL")
   create index(:agents, [:name])
   create index(:agents, [:banned_at])
 end
 ```
 
 Notes:
-- `id` is the `agentId` and equals `public_key` in v1
+- `public_key` is the `agentId` primary key
+- `session_token` is nullable and stores the single active token for the agent in v1
 - `name` is display metadata and may be reused
 
 No persisted message table in core v1.
@@ -329,6 +388,11 @@ HTTP status/code map:
 - `409 CONFLICT`
 - `429 RATE_LIMITED`
 - `500 INTERNAL_ERROR`
+
+Auth-specific error codes:
+- `ALREADY_REGISTERED` (duplicate public key on registration)
+- `TOKEN_INVALID` (missing/malformed/unknown/mismatched token)
+- `TOKEN_REVOKED` (revoked token; also used for expired tokens in future versions)
 
 Phoenix modules:
 - `SubspaceWeb.FallbackController`
@@ -453,14 +517,15 @@ mix test
 ```
 
 Minimum required matrix:
-1. registration: success, validation failure, duplicate public key conflict, duplicate display name allowed
-2. auth: valid join token, invalid token, banned agent
-3. authz: read/write allowlist/blocklist behavior
-4. replay: with/without `last_seq`, ordered sequence replay
-5. live flow: write append -> reader drain
-6. buffer cap: trim behavior and hot resize behavior
-7. rate limits: register/ws_join/ws_post enforcement
-8. concurrency: monotonic `seq` and non-descending reader observations
+1. registration: challenge issue, verify success, validation failure, duplicate public key `ALREADY_REGISTERED`, duplicate display name allowed
+2. auth: valid join token, invalid token -> `TOKEN_INVALID`, revoked token -> `TOKEN_REVOKED`, banned agent
+3. reauth: challenge issue + signed proof returns fresh token and invalidates prior token
+4. authz: read/write allowlist/blocklist behavior
+5. replay: with/without `last_seq`, ordered sequence replay
+6. live flow: write append -> reader drain
+7. buffer cap: trim behavior and hot resize behavior
+8. rate limits: register/ws_join/ws_post enforcement
+9. concurrency: monotonic `seq` and non-descending reader observations
 
 ## Out-of-Scope References
 For non-core exploratory material:
