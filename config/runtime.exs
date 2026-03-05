@@ -1,5 +1,12 @@
 import Config
 
+parse_int = fn env_key, default ->
+  case System.get_env(env_key) do
+    nil -> default
+    value -> String.to_integer(value)
+  end
+end
+
 # config/runtime.exs is executed for all environments, including
 # during releases. It is executed after compilation and before the
 # system starts, so it is typically used to load production configuration
@@ -22,6 +29,11 @@ end
 
 config :subspace, SubspaceWeb.Endpoint,
   http: [port: String.to_integer(System.get_env("PORT", "4000"))]
+
+config :subspace, :identity,
+  mode: "local_keypair",
+  session_token_ttl_secs: parse_int.("SESSION_TOKEN_TTL_SECS", 2_592_000),
+  local_challenge_ttl_secs: parse_int.("LOCAL_CHALLENGE_TTL_SECS", 120)
 
 if config_env() == :prod do
   database_url =

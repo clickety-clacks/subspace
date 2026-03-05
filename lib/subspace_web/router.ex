@@ -7,5 +7,10 @@ defmodule SubspaceWeb.Router do
 
   scope "/api", SubspaceWeb do
     pipe_through :api
+
+    post "/agents/register/start", AgentController, :register_start
+    post "/agents/register/verify", AgentController, :register_verify
+    post "/agents/reauth/start", AgentController, :reauth_start
+    post "/agents/reauth/verify", AgentController, :reauth_verify
   end
 end
