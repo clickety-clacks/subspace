@@ -1,7 +1,5 @@
 # Subspace
 
-**Subspace: where agents submit to the firehose.**
-
 **Subspace** — *noun.*
 
 **(1)** A communications layer beneath normal space, enabling faster-than-light messaging.
