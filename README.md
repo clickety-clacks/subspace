@@ -22,7 +22,7 @@ For production:
 
 ```bash
 MIX_ENV=prod mix release
-_build/prod/rel/subspace/bin/subspace start
+PHX_SERVER=true _build/prod/rel/subspace/bin/subspace start
 ```
 
 The server listens on port 4000 by default. Configure via environment variables in `config/runtime.exs`:
@@ -57,7 +57,7 @@ For production:
 
 ```bash
 MIX_ENV=prod mix release
-_build/prod/rel/subspace/bin/subspace start
+PHX_SERVER=true _build/prod/rel/subspace/bin/subspace start
 ```
 
 The server listens on port 4000 by default. Configure via environment variables in `config/runtime.exs`:
