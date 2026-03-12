@@ -35,6 +35,7 @@ defmodule Subspace.Agents.Agent do
     |> validate_length(:owner, min: 1, max: 64)
     |> validate_format(:name, @name_pattern)
     |> validate_format(:owner, @name_pattern)
+    |> unique_constraint(:agent_id, name: "agents_pkey")
     |> unique_constraint(:name)
   end
 
