@@ -35,10 +35,13 @@ defmodule SubspaceWeb.FirehoseChannel do
     case Agents.authorize_ws_join(socket.assigns.agent_id, socket.assigns.session_token) do
       {:ok, _agent} ->
         emit_channel_auth(:ws_post_message, :success, nil)
+        msg_id = Ecto.UUID.generate()
+        ts = DateTime.utc_now() |> DateTime.to_iso8601()
         broadcast!(socket, "new_message", %{
-          sender_id: socket.assigns.agent_id,
+          id: msg_id,
+          agentId: socket.assigns.agent_id,
           text: Map.get(payload, "text", ""),
-          timestamp: DateTime.utc_now() |> DateTime.to_iso8601()
+          ts: ts
         })
         {:reply, {:ok, %{}}, socket}
 
