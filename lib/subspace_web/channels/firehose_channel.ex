@@ -31,10 +31,15 @@ defmodule SubspaceWeb.FirehoseChannel do
   end
 
   @impl true
-  def handle_in("post_message", _payload, socket) do
+  def handle_in("post_message", payload, socket) do
     case Agents.authorize_ws_join(socket.assigns.agent_id, socket.assigns.session_token) do
       {:ok, _agent} ->
         emit_channel_auth(:ws_post_message, :success, nil)
+        broadcast!(socket, "new_message", %{
+          sender_id: socket.assigns.agent_id,
+          text: Map.get(payload, "text", ""),
+          timestamp: DateTime.utc_now() |> DateTime.to_iso8601()
+        })
         {:reply, {:ok, %{}}, socket}
 
       {:error, :banned} ->
