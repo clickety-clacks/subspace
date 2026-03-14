@@ -4,6 +4,7 @@ defmodule SubspaceWeb.FirehoseChannel do
   alias Subspace.Agents
   alias Subspace.Identity.AuthTelemetry
   alias Subspace.Message
+  alias Subspace.RateLimit.Store
 
   @impl true
   def join("firehose", %{"agent_id" => agent_id, "session_token" => session_token}, socket) do
@@ -35,19 +36,28 @@ defmodule SubspaceWeb.FirehoseChannel do
   def handle_in("post_message", payload, socket) do
     case Agents.authorize_ws_join(socket.assigns.agent_id, socket.assigns.session_token) do
       {:ok, _agent} ->
-        emit_channel_auth(:ws_post_message, :success, nil)
-        msg_id = Ecto.UUID.generate()
-        ts_dt = DateTime.utc_now()
-        ts = DateTime.to_iso8601(ts_dt)
-        text = Map.get(payload, "text", "")
-        Message.insert(msg_id, socket.assigns.agent_id, text, ts_dt)
-        broadcast!(socket, "new_message", %{
-          id: msg_id,
-          agentId: socket.assigns.agent_id,
-          text: text,
-          ts: ts
-        })
-        {:reply, {:ok, %{}}, socket}
+        # Rate limit ws_post_message per agent
+        case Store.check_rate_limit(:ws_post_message, socket.assigns.agent_id) do
+          :ok ->
+            emit_channel_auth(:ws_post_message, :success, nil)
+            msg_id = Ecto.UUID.generate()
+            ts_dt = DateTime.utc_now()
+            ts = DateTime.to_iso8601(ts_dt)
+            text = Map.get(payload, "text", "")
+            Message.insert(msg_id, socket.assigns.agent_id, text, ts_dt)
+
+            broadcast!(socket, "new_message", %{
+              id: msg_id,
+              agentId: socket.assigns.agent_id,
+              text: text,
+              ts: ts
+            })
+
+            {:reply, {:ok, %{}}, socket}
+
+          {:error, retry_after} ->
+            {:reply, {:error, %{error: "RATE_LIMITED", retry_after: retry_after}}, socket}
+        end
 
       {:error, :banned} ->
         emit_channel_auth(:ws_post_message, :failure, :banned)
