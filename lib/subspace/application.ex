@@ -12,9 +12,8 @@ defmodule Subspace.Application do
       Subspace.Repo,
       {DNSCluster, query: Application.get_env(:subspace, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Subspace.PubSub},
-      # Start a worker by calling: Subspace.Worker.start_link(arg)
-      # {Subspace.Worker, arg},
-      # Start to serve requests, typically the last entry
+      Subspace.RateLimit.Store,
+      Subspace.RateLimit.Cleanup,
       SubspaceWeb.Endpoint
     ]
 
