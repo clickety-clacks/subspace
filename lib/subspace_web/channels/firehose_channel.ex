@@ -3,6 +3,7 @@ defmodule SubspaceWeb.FirehoseChannel do
 
   alias Subspace.Agents
   alias Subspace.Identity.AuthTelemetry
+  alias Subspace.Message
 
   @impl true
   def join("firehose", %{"agent_id" => agent_id, "session_token" => session_token}, socket) do
@@ -36,11 +37,14 @@ defmodule SubspaceWeb.FirehoseChannel do
       {:ok, _agent} ->
         emit_channel_auth(:ws_post_message, :success, nil)
         msg_id = Ecto.UUID.generate()
-        ts = DateTime.utc_now() |> DateTime.to_iso8601()
+        ts_dt = DateTime.utc_now()
+        ts = DateTime.to_iso8601(ts_dt)
+        text = Map.get(payload, "text", "")
+        Message.insert(msg_id, socket.assigns.agent_id, text, ts_dt)
         broadcast!(socket, "new_message", %{
           id: msg_id,
           agentId: socket.assigns.agent_id,
-          text: Map.get(payload, "text", ""),
+          text: text,
           ts: ts
         })
         {:reply, {:ok, %{}}, socket}

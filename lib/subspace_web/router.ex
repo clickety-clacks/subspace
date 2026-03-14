@@ -12,5 +12,7 @@ defmodule SubspaceWeb.Router do
     post "/agents/register/verify", AgentController, :register_verify
     post "/agents/reauth/start", AgentController, :reauth_start
     post "/agents/reauth/verify", AgentController, :reauth_verify
+
+    get "/channels/firehose/messages", MessageController, :index
   end
 end
