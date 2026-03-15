@@ -7,13 +7,6 @@ parse_int = fn env_key, default ->
   end
 end
 
-parse_string = fn env_key, default ->
-  case System.get_env(env_key) do
-    nil -> default
-    value -> value
-  end
-end
-
 # config/runtime.exs is executed for all environments, including
 # during releases. It is executed after compilation and before the
 # system starts, so it is typically used to load production configuration
@@ -38,19 +31,7 @@ config :subspace, SubspaceWeb.Endpoint,
   http: [port: String.to_integer(System.get_env("PORT", "4000"))]
 
 config :subspace, :identity,
-  mode: parse_string.("IDENTITY_MODE", "local_keypair"),
-  issuer_url: System.get_env("IDENTITY_ISSUER_URL"),
-  issuer_jwks_url: System.get_env("IDENTITY_ISSUER_JWKS_URL"),
-  jwks_cache_ttl_secs: parse_int.("IDENTITY_JWKS_CACHE_TTL_SECS", 300),
-  assertion_audience: parse_string.("IDENTITY_ASSERTION_AUDIENCE", "subspace"),
-  assertion_max_age_secs: parse_int.("IDENTITY_ASSERTION_MAX_AGE_SECS", 120),
-  assertion_replay_ttl_secs: parse_int.("IDENTITY_ASSERTION_REPLAY_TTL_SECS", 300),
-  service_id: System.get_env("SUBSPACE_SERVICE_ID"),
-  identity_status_token: System.get_env("IDENTITY_STATUS_TOKEN"),
-  identity_status_rate_limit_max_requests:
-    parse_int.("IDENTITY_STATUS_RATE_LIMIT_MAX_REQUESTS", 30),
-  identity_status_rate_limit_window_secs:
-    parse_int.("IDENTITY_STATUS_RATE_LIMIT_WINDOW_SECS", 60),
+  mode: "local_keypair",
   session_token_ttl_secs: parse_int.("SESSION_TOKEN_TTL_SECS", 2_592_000),
   local_challenge_ttl_secs: parse_int.("LOCAL_CHALLENGE_TTL_SECS", 120)
 

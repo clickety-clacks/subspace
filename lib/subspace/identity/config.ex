@@ -1,15 +1,9 @@
 defmodule Subspace.Identity.Config do
   @moduledoc false
 
-  @type mode :: :local_keypair | :external_service
+  @type mode :: :local_keypair
 
-  def mode do
-    case identity_env(:mode, "local_keypair") do
-      "external_service" -> :external_service
-      :external_service -> :external_service
-      _ -> :local_keypair
-    end
-  end
+  def mode, do: :local_keypair
 
   def issuer_url, do: identity_env(:issuer_url)
   def issuer_jwks_url, do: identity_env(:issuer_jwks_url)

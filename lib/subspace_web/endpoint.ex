@@ -38,7 +38,7 @@ defmodule SubspaceWeb.Endpoint do
     plug Phoenix.Ecto.CheckRepoStatus, otp_app: :subspace
   end
 
-  plug Plug.RequestId, assign_as: :request_id
+  plug Plug.RequestId
   plug Plug.Telemetry, event_prefix: [:phoenix, :endpoint]
 
   plug Plug.Parsers,
