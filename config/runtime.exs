@@ -7,6 +7,14 @@ parse_int = fn env_key, default ->
   end
 end
 
+parse_log_level = fn
+  "debug" -> :debug
+  "warn" -> :warning
+  "warning" -> :warning
+  "error" -> :error
+  _ -> :info
+end
+
 # config/runtime.exs is executed for all environments, including
 # during releases. It is executed after compilation and before the
 # system starts, so it is typically used to load production configuration
@@ -29,6 +37,13 @@ end
 
 config :subspace, SubspaceWeb.Endpoint,
   http: [port: String.to_integer(System.get_env("PORT", "4000"))]
+
+config :subspace,
+  rate_limit_register_per_hour: parse_int.("RATE_LIMIT_REGISTER_PER_HOUR", 10),
+  rate_limit_ws_messages_per_min: parse_int.("RATE_LIMIT_WS_MESSAGES_PER_MIN", 60),
+  buffer_max_messages: parse_int.("BUFFER_MAX_MESSAGES", 200)
+
+config :logger, level: parse_log_level.(System.get_env("LOG_LEVEL", "info"))
 
 config :subspace, :identity,
   mode: "local_keypair",

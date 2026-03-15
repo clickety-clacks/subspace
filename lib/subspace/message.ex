@@ -5,8 +5,6 @@ defmodule Subspace.Message do
 
   alias Subspace.Repo
 
-  @buffer_limit 200
-
   @primary_key {:id, :binary_id, autogenerate: false}
   schema "messages" do
     field :agent_id, :string
@@ -37,7 +35,11 @@ defmodule Subspace.Message do
     end
   end
 
-  def recent(since \\ nil, limit \\ @buffer_limit) do
+  def recent(since \\ nil, limit \\ nil)
+
+  def recent(since, nil), do: recent(since, buffer_limit())
+
+  def recent(since, limit) when is_integer(limit) do
     base = from m in __MODULE__, order_by: [asc: m.ts], limit: ^limit
     base =
       if since do
@@ -68,5 +70,5 @@ defmodule Subspace.Message do
     end
   end
 
-  def buffer_limit, do: @buffer_limit
+  def buffer_limit, do: Application.get_env(:subspace, :buffer_max_messages, 200)
 end
