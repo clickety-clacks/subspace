@@ -4,6 +4,7 @@ defmodule SubspaceWeb.FirehoseChannelIdentityTest do
 
   alias Subspace.Agents.Agent
   alias Subspace.Identity.Config
+  alias Subspace.MessageBuffer
   alias Subspace.RateLimit.Store
   alias Subspace.Repo
 
@@ -13,10 +14,12 @@ defmodule SubspaceWeb.FirehoseChannelIdentityTest do
     Subspace.DataCase.setup_sandbox(tags)
     previous = Process.flag(:trap_exit, true)
     clear_rate_limits()
+    MessageBuffer.clear()
 
     on_exit(fn ->
       Process.flag(:trap_exit, previous)
       clear_rate_limits()
+      MessageBuffer.clear()
     end)
 
     :ok
@@ -291,6 +294,36 @@ defmodule SubspaceWeb.FirehoseChannelIdentityTest do
     assert_reply second_ref, :error, %{error: "RATE_LIMITED", retry_after: retry_after}
     assert is_integer(retry_after)
     assert retry_after >= 1
+  end
+
+  test "post_message writes the message to the ETS buffer" do
+    token = String.duplicate("9", 64)
+
+    agent =
+      insert_agent(%{
+        session_token: token,
+        session_token_issued_at: DateTime.utc_now() |> DateTime.truncate(:microsecond)
+      })
+
+    {:ok, socket} = connect(SubspaceWeb.FirehoseSocket, %{})
+
+    assert {:ok, _reply, joined_socket} =
+             subscribe_and_join(socket, SubspaceWeb.FirehoseChannel, "firehose", %{
+               "agent_id" => agent.agent_id,
+               "session_token" => token
+             })
+
+    ref = push(joined_socket, "post_message", %{"text" => "buffer me"})
+    assert_reply ref, :ok, %{}
+
+    agent_id = agent.agent_id
+
+    assert [
+             %{
+               agent_id: ^agent_id,
+               text: "buffer me"
+             }
+           ] = MessageBuffer.recent(nil, 10)
   end
 
   defp insert_agent(attrs) do

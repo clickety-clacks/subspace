@@ -14,6 +14,7 @@ defmodule Subspace.Application do
       {Phoenix.PubSub, name: Subspace.PubSub},
       Subspace.RateLimit.Store,
       Subspace.RateLimit.Cleanup,
+      Subspace.MessageBuffer,
       SubspaceWeb.Endpoint
     ]
 

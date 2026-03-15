@@ -1,9 +1,19 @@
 defmodule SubspaceWeb.MessageControllerTest do
-  use SubspaceWeb.ConnCase, async: true
+  use SubspaceWeb.ConnCase, async: false
 
   alias Subspace.Agents.Agent
-  alias Subspace.Message
+  alias Subspace.MessageBuffer
   alias Subspace.Repo
+
+  setup do
+    MessageBuffer.clear()
+
+    on_exit(fn ->
+      MessageBuffer.clear()
+    end)
+
+    :ok
+  end
 
   test "GET /api/channels/firehose/messages returns 401 without auth headers", %{conn: conn} do
     conn = get(conn, "/api/channels/firehose/messages")
@@ -29,10 +39,10 @@ defmodule SubspaceWeb.MessageControllerTest do
     base = DateTime.utc_now() |> DateTime.truncate(:microsecond)
 
     assert {:ok, first} =
-             Message.insert(Ecto.UUID.generate(), agent.agent_id, "hello", base)
+             MessageBuffer.insert(Ecto.UUID.generate(), agent.agent_id, "hello", base)
 
     assert {:ok, second} =
-             Message.insert(
+             MessageBuffer.insert(
                Ecto.UUID.generate(),
                agent.agent_id,
                "world",

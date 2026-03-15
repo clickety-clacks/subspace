@@ -1,14 +1,15 @@
-defmodule Subspace.MessageTest do
-  use Subspace.DataCase, async: false
+defmodule Subspace.MessageBufferTest do
+  use ExUnit.Case, async: false
 
-  alias Subspace.Message
-  alias Subspace.Repo
+  alias Subspace.MessageBuffer
 
   setup do
     previous_buffer_limit = Application.get_env(:subspace, :buffer_max_messages)
+    MessageBuffer.clear()
 
     on_exit(fn ->
       restore_optional_env(:buffer_max_messages, previous_buffer_limit)
+      MessageBuffer.clear()
     end)
 
     :ok
@@ -18,10 +19,10 @@ defmodule Subspace.MessageTest do
     base = DateTime.utc_now() |> DateTime.truncate(:microsecond)
 
     assert {:ok, _message} =
-             Message.insert(Ecto.UUID.generate(), "agent-1", "first", base)
+             MessageBuffer.insert(Ecto.UUID.generate(), "agent-1", "first", base)
 
     assert {:ok, _message} =
-             Message.insert(
+             MessageBuffer.insert(
                Ecto.UUID.generate(),
                "agent-1",
                "second",
@@ -29,19 +30,19 @@ defmodule Subspace.MessageTest do
              )
 
     assert {:ok, _message} =
-             Message.insert(
+             MessageBuffer.insert(
                Ecto.UUID.generate(),
                "agent-1",
                "third",
                DateTime.add(base, 2, :microsecond)
              )
 
-    assert {1, nil} = Message.trim_to_limit(2)
+    assert {1, nil} = MessageBuffer.trim_to_limit(2)
 
-    messages = Message.recent(nil, 10)
+    messages = MessageBuffer.recent(nil, 10)
 
     assert Enum.map(messages, & &1.text) == ["second", "third"]
-    assert Repo.aggregate(Message, :count, :id) == 2
+    assert length(messages) == 2
   end
 
   test "buffer_limit/0 reads application config and insert/4 trims to that limit" do
@@ -49,13 +50,13 @@ defmodule Subspace.MessageTest do
 
     base = DateTime.utc_now() |> DateTime.truncate(:microsecond)
 
-    assert Message.buffer_limit() == 2
+    assert MessageBuffer.buffer_limit() == 2
 
     assert {:ok, _message} =
-             Message.insert(Ecto.UUID.generate(), "agent-2", "first", base)
+             MessageBuffer.insert(Ecto.UUID.generate(), "agent-2", "first", base)
 
     assert {:ok, _message} =
-             Message.insert(
+             MessageBuffer.insert(
                Ecto.UUID.generate(),
                "agent-2",
                "second",
@@ -63,17 +64,17 @@ defmodule Subspace.MessageTest do
              )
 
     assert {:ok, _message} =
-             Message.insert(
+             MessageBuffer.insert(
                Ecto.UUID.generate(),
                "agent-2",
                "third",
                DateTime.add(base, 2, :microsecond)
              )
 
-    messages = Message.recent(nil, 10)
+    messages = MessageBuffer.recent(nil, 10)
 
     assert Enum.map(messages, & &1.text) == ["second", "third"]
-    assert Repo.aggregate(Message, :count, :id) == 2
+    assert length(messages) == 2
   end
 
   defp restore_optional_env(key, nil), do: Application.delete_env(:subspace, key)
