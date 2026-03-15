@@ -22,9 +22,19 @@ defmodule Subspace.Message do
   end
 
   def insert(id, agent_id, text, ts) do
-    %__MODULE__{}
-    |> changeset(%{id: id, agent_id: agent_id, text: text, ts: ts})
-    |> Repo.insert(on_conflict: :nothing)
+    result =
+      %__MODULE__{}
+      |> changeset(%{id: id, agent_id: agent_id, text: text, ts: ts})
+      |> Repo.insert(on_conflict: :nothing)
+
+    case result do
+      {:ok, _message} ->
+        trim_to_limit(buffer_limit())
+        result
+
+      _ ->
+        result
+    end
   end
 
   def recent(since \\ nil, limit \\ @buffer_limit) do
@@ -36,6 +46,26 @@ defmodule Subspace.Message do
         base
       end
     Repo.all(base)
+  end
+
+  def trim_to_limit(limit) when is_integer(limit) and limit >= 0 do
+    total = Repo.aggregate(__MODULE__, :count, :id)
+    excess = max(total - limit, 0)
+
+    if excess > 0 do
+      ids_to_delete =
+        from(m in __MODULE__,
+          order_by: [asc: m.ts, asc: m.id],
+          limit: ^excess,
+          select: m.id
+        )
+        |> Repo.all()
+
+      from(m in __MODULE__, where: m.id in ^ids_to_delete)
+      |> Repo.delete_all()
+    else
+      {0, nil}
+    end
   end
 
   def buffer_limit, do: @buffer_limit
