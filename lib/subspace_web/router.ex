@@ -29,6 +29,18 @@ defmodule SubspaceWeb.Router do
     get "/channels/firehose/messages", MessageController, :index
   end
 
+  scope "/api", SubspaceWeb do
+    pipe_through :api
+
+    get "/identity/status", IdentityStatusController, :show
+    head "/identity/status", IdentityStatusController, :show
+    options "/identity/status", IdentityStatusController, :options
+    post "/identity/status", IdentityStatusController, :method_not_allowed
+    put "/identity/status", IdentityStatusController, :method_not_allowed
+    patch "/identity/status", IdentityStatusController, :method_not_allowed
+    delete "/identity/status", IdentityStatusController, :method_not_allowed
+  end
+
   scope "/", SubspaceWeb do
     pipe_through :api
 
