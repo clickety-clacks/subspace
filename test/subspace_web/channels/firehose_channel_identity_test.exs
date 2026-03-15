@@ -4,6 +4,7 @@ defmodule SubspaceWeb.FirehoseChannelIdentityTest do
 
   alias Subspace.Agents.Agent
   alias Subspace.Identity.Config
+  alias Subspace.RateLimit.Store
   alias Subspace.Repo
 
   @endpoint SubspaceWeb.Endpoint
@@ -11,9 +12,11 @@ defmodule SubspaceWeb.FirehoseChannelIdentityTest do
   setup tags do
     Subspace.DataCase.setup_sandbox(tags)
     previous = Process.flag(:trap_exit, true)
+    clear_rate_limits()
 
     on_exit(fn ->
       Process.flag(:trap_exit, previous)
+      clear_rate_limits()
     end)
 
     :ok
@@ -255,6 +258,41 @@ defmodule SubspaceWeb.FirehoseChannelIdentityTest do
     assert_receive {:DOWN, ^monitor_ref, :process, _pid, :token_invalid}
   end
 
+  test "post_message returns RATE_LIMITED when ws message rate limit is exceeded" do
+    previous_limit = Application.get_env(:subspace, :rate_limit_ws_messages_per_min)
+    Application.put_env(:subspace, :rate_limit_ws_messages_per_min, 1)
+
+    on_exit(fn ->
+      restore_optional_env(:rate_limit_ws_messages_per_min, previous_limit)
+      clear_rate_limits()
+    end)
+
+    token = String.duplicate("8", 64)
+
+    agent =
+      insert_agent(%{
+        session_token: token,
+        session_token_issued_at: DateTime.utc_now() |> DateTime.truncate(:microsecond)
+      })
+
+    {:ok, socket} = connect(SubspaceWeb.FirehoseSocket, %{})
+
+    assert {:ok, _reply, joined_socket} =
+             subscribe_and_join(socket, SubspaceWeb.FirehoseChannel, "firehose", %{
+               "agent_id" => agent.agent_id,
+               "session_token" => token
+             })
+
+    first_ref = push(joined_socket, "post_message", %{"text" => "hello"})
+    assert_reply first_ref, :ok, %{}
+
+    second_ref = push(joined_socket, "post_message", %{"text" => "again"})
+
+    assert_reply second_ref, :error, %{error: "RATE_LIMITED", retry_after: retry_after}
+    assert is_integer(retry_after)
+    assert retry_after >= 1
+  end
+
   defp insert_agent(attrs) do
     unique = System.unique_integer([:positive])
 
@@ -271,4 +309,14 @@ defmodule SubspaceWeb.FirehoseChannelIdentityTest do
     |> Agent.registration_changeset(Map.merge(defaults, attrs))
     |> Repo.insert!()
   end
+
+  defp clear_rate_limits do
+    case :ets.whereis(Store.table_name()) do
+      :undefined -> :ok
+      _tid -> :ets.delete_all_objects(Store.table_name())
+    end
+  end
+
+  defp restore_optional_env(key, nil), do: Application.delete_env(:subspace, key)
+  defp restore_optional_env(key, value), do: Application.put_env(:subspace, key, value)
 end
