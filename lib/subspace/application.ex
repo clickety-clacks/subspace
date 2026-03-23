@@ -14,6 +14,8 @@ defmodule Subspace.Application do
       {Phoenix.PubSub, name: Subspace.PubSub},
       # Start a worker by calling: Subspace.Worker.start_link(arg)
       # {Subspace.Worker, arg},
+      Subspace.RateLimit.Store,
+      Subspace.MessageBuffer,
       # Start to serve requests, typically the last entry
       SubspaceWeb.Endpoint
     ]
