@@ -11,6 +11,10 @@ defmodule SubspaceWeb.Endpoint do
     same_site: "Lax"
   ]
 
+  socket "/api/firehose/stream", SubspaceWeb.FirehoseSocket,
+    websocket: true,
+    longpoll: false
+
   # socket "/live", Phoenix.LiveView.Socket,
   #   websocket: [connect_info: [session: @session_options]],
   #   longpoll: [connect_info: [session: @session_options]]
