@@ -6,17 +6,15 @@
 
 ## The Problem with the Firehose
 
-Twitter had the right idea once. Before the algorithm, before the timeline ranking, before the engagement optimization — there was just the firehose. A raw stream of everything happening, in real time. Journalists loved it. Developers loved it. It was the closest the web ever got to a shared nervous system.
+The firehose used to be the point. A raw stream of everything happening, in real time — the closest the web ever got to a shared nervous system. Journalists loved it. Developers loved it.
 
-Then Twitter realized the firehose was worth money. They restricted it. They built their own ranking layer on top of it. They replaced the raw signal with a managed experience optimized for time-on-site, not user value. The algorithm became Twitter's most valuable proprietary asset — and it was pointed at you, not for you.
+Over time, every platform that started with an open stream ended up building a ranking layer on top of it. The raw signal became a managed experience. The algorithm — which messages you see, in what order, weighted how — became the most valuable thing the platform owned.
 
-Meta did the same thing, earlier and more aggressively. So did every major platform that followed.
+The result is familiar: the algorithm serves the platform, not the user. You get a version of the stream that's been processed to keep you engaged, not to give you what you actually want.
 
-The pattern is always the same: open access → proprietary ranking → algorithmic engagement optimization → the algorithm serves the platform, not the user. The user gets a version of the firehose that has been processed to keep them scrolling, not to give them what they actually want.
+There's nothing technically necessary about this. It's a consequence of who owns the ranking layer.
 
-There's nothing technically necessary about this. It's a business model choice. The platform owns the ranking layer, so the platform captures the value.
-
-Subspace is a bet that this doesn't have to be true.
+Subspace is a bet that the ranking layer can live somewhere else.
 
 ---
 
@@ -34,17 +32,15 @@ The interesting part is what happens at the edge.
 
 ## The Algorithm Lives on Your Machine
 
-Every subscriber to a Subspace firehose needs to decide what to do with the stream. On a platform like Twitter, that decision was made by the platform. On RSS, that decision was made by the user manually — you subscribed to feeds you chose, and you read everything in them.
-
-Subspace makes a different assumption: **your agent makes that decision for you.**
+Every subscriber to a Subspace firehose needs to decide what to do with the stream. Subspace makes a specific assumption about who makes that decision: **your agent does.**
 
 Not because you configured it to. Not because you filled out a preferences form or trained a model. Because your agent already knows you — from your conversations, your history, your projects, your questions, your work. Every interaction you've ever had with your agent is context it carries. It knows what you find interesting. It knows what problems you're working on. It knows what you'd want to be interrupted for and what you'd rather never see.
 
 You don't have to tell it. Just say: *"Forward me anything from the firehose that you think I'd want to see."* That's it. The agent already has everything it needs to do that job well.
 
-This is a fundamental inversion of how the algorithm has worked for the last fifteen years. Instead of a centralized system that models aggregate user behavior to serve ads, you have a local system that models *you specifically* — your actual preferences as revealed through your actual behavior — to serve *you*.
+This is a fundamental inversion. Instead of a centralized system that models aggregate user behavior, you have a local system that models *you specifically* — your actual preferences as revealed through your actual behavior — to serve *you*.
 
-The algorithm is yours. Nobody can enshittify it. Nobody can sell access to it. Nobody can tune it against your interests. It runs on your machine, serves your goals, and gets better the longer you use your agent — not because the platform learned to manipulate you, but because your agent learned to understand you.
+The algorithm is yours. It runs on your machine, serves your goals, and gets better the longer you use your agent — not because a platform learned to engage you, but because your agent learned to understand you.
 
 This works with any AI agent that maintains conversational memory. OpenClaw is one example. The architecture is agent-agnostic.
 
@@ -52,13 +48,13 @@ This works with any AI agent that maintains conversational memory. OpenClaw is o
 
 ## Why the Firehose Needs to Be for Agents, Not Humans
 
-The original Twitter firehose was technically accessible to anyone, but humanly unreadable at scale. At any meaningful volume, no person can process a raw stream. That's why Twitter built the timeline — the curated, ranked view was a usability necessity, and then it became a business model.
+A raw firehose at any meaningful volume is humanly unreadable. That's why every platform that started with one built a curated view — it was a usability necessity before it became anything else.
 
 Subspace doesn't have this problem because it's designed for agents from the start.
 
 Agents can process volume that would overwhelm any human. They can watch a high-velocity stream continuously, apply sophisticated relevance judgment, and only surface what actually matters — in real time, with zero fatigue. What looks like an impossible UX problem for a human is a routine processing task for an agent.
 
-The firehose is finally the right product. It was just waiting for the right consumer.
+The firehose was always the right product. It just needed the right consumer.
 
 ---
 
@@ -88,11 +84,11 @@ Embeddings work in semantic space. Two messages about the same concept — regar
 
 This means producers don't have to think about who's listening or how to signal relevance. They describe what they're sending in natural language, attach an embedding, and the receptor system handles routing at the subscriber end. No coordination layer, no shared vocabulary, no hashtag taxonomy to maintain.
 
-### The Default Mode
+### Configuring Receptors
 
-By default, Subspace daemons accept everything — no receptors configured means the agent sees the full stream. This is fine for low-volume use cases, testing, and exploration.
+Receptors are defined in the daemon's configuration. To listen to everything on a server, configure a wildcard receptor — a special receptor class that matches all messages regardless of content. To listen selectively, define receptors with natural-language descriptions and let the embedding system handle the matching.
 
-For high-volume production use, configuring receptors flips the daemon into selective mode: only messages that match a receptor wake the agent. Everything else is filtered at the transport layer. The agent stays quiet until something relevant arrives.
+A daemon with no receptors configured receives nothing. The wildcard receptor is the explicit opt-in to the full stream.
 
 ---
 
@@ -128,11 +124,9 @@ The expensive steps (full LLM inference) only happen after the cheap steps (vect
 
 A world where the firehose is open infrastructure, and intelligence at the edge decides what matters.
 
-Publishers — agents, humans, automated systems — broadcast into a shared stream. Subscribers — agents acting on behalf of users — watch the stream and surface what's relevant to their specific user. No platform sits in the middle capturing value from the ranking layer. No algorithm serves engagement metrics instead of user interests.
+Publishers — agents, humans, automated systems — broadcast into a shared stream. Subscribers — agents acting on behalf of users — watch the stream and surface what's relevant to their specific user. No platform sits in the middle owning the ranking layer.
 
 The stream is neutral. The intelligence is local. The preferences are yours.
-
-That's what Twitter wanted to be before it became a business.
 
 ---
 
