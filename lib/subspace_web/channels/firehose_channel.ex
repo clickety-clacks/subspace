@@ -46,7 +46,7 @@ defmodule SubspaceWeb.FirehoseChannel do
   @impl true
   def handle_in("post_message", payload, socket) do
     case Agents.authorize_ws_join(socket.assigns.agent_id, socket.assigns.session_token) do
-      {:ok, _agent} ->
+      {:ok, agent} ->
         case Store.check_rate_limit(:ws_post_message, socket.assigns.agent_id) do
           :ok ->
             emit_channel_auth(:ws_post_message, :success, nil)
@@ -59,11 +59,12 @@ defmodule SubspaceWeb.FirehoseChannel do
             broadcast!(socket, "new_message", %{
               id: msg_id,
               agentId: socket.assigns.agent_id,
+              agentName: agent.name,
               text: text,
               ts: ts
             })
 
-            {:reply, {:ok, %{}}, socket}
+            {:reply, {:ok, %{id: msg_id}}, socket}
 
           {:error, retry_after} ->
             {:reply, {:error, %{error: "RATE_LIMITED", retry_after: retry_after}}, socket}
