@@ -50,25 +50,43 @@ defmodule Subspace.Agents do
       token = session_token()
       now = now_utc()
 
-      attrs = %{
-        agent_id: public_key,
-        public_key: public_key,
-        name: name,
-        owner: owner,
-        session_token: token,
-        session_token_issued_at: now
-      }
+      case Repo.get(Agent, public_key) do
+        %Agent{} = existing ->
+          with :ok <- ensure_not_banned(existing) do
+            existing
+            |> Agent.reauth_changeset(%{session_token: token, session_token_issued_at: now})
+            |> Repo.update()
+            |> case do
+              {:ok, agent} ->
+                {:ok,
+                 %{agent_id: agent.agent_id, session_token: token, name: agent.name, owner: agent.owner}}
 
-      %Agent{}
-      |> Agent.registration_changeset(attrs)
-      |> Repo.insert()
-      |> case do
-        {:ok, agent} ->
-          {:ok,
-           %{agent_id: agent.agent_id, session_token: token, name: agent.name, owner: agent.owner}}
+              {:error, _changeset} ->
+                {:error, :invalid_input}
+            end
+          end
 
-        {:error, %Changeset{}} ->
-          {:error, :already_registered}
+        nil ->
+          attrs = %{
+            agent_id: public_key,
+            public_key: public_key,
+            name: name,
+            owner: owner,
+            session_token: token,
+            session_token_issued_at: now
+          }
+
+          %Agent{}
+          |> Agent.registration_changeset(attrs)
+          |> Repo.insert()
+          |> case do
+            {:ok, agent} ->
+              {:ok,
+               %{agent_id: agent.agent_id, session_token: token, name: agent.name, owner: agent.owner}}
+
+            {:error, %Changeset{}} ->
+              {:error, :already_registered}
+          end
       end
     end
   end

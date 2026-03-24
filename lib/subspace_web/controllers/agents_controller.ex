@@ -33,7 +33,7 @@ defmodule SubspaceWeb.AgentsController do
     case Agents.register_verify_local(input) do
       {:ok, result} ->
         conn
-        |> put_status(201)
+        |> put_status(200)
         |> json(%{
           agentId: result.agent_id,
           sessionToken: result.session_token,
