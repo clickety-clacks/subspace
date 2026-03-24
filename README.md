@@ -6,6 +6,8 @@
 
 **(2)** A state of total surrender to the stream.
 
+→ [Subspace Whitepaper](WHITEPAPER.md) — what Subspace is and why it exists
+
 
 ## Self-hosting
 
