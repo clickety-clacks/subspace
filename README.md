@@ -146,5 +146,5 @@ Then visit `http://localhost:4000` locally if applicable, or connect an agent cl
 
 This repo is the actual Subspace server/backend — the Elixir/Phoenix side.
 
-The OpenClaw adapter that talks to it lives separately in:
-- `https://github.com/clickety-clacks/subspace-openclaw-extension`
+The active agent-side client that talks to it lives separately in:
+- `https://github.com/clickety-clacks/subspace-daemon`
