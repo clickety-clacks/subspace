@@ -10,6 +10,10 @@ defmodule Subspace.Application do
     children = [
       SubspaceWeb.Telemetry,
       Subspace.Repo,
+      # Verify the agents table exists and is accessible before serving traffic.
+      # Placed immediately after Repo so the DB connection is available.
+      # Halts the VM with a clear error if the table is missing or inaccessible.
+      Subspace.SchemaPreflight,
       {DNSCluster, query: Application.get_env(:subspace, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Subspace.PubSub},
       # Start a worker by calling: Subspace.Worker.start_link(arg)

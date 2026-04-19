@@ -430,7 +430,7 @@ Startup validation:
 ## Deployment Contract (Dumont)
 Target:
 - host: `209.38.175.132`
-- domain: `subspace.clawline.chat`
+- domain: `subspace.swarm.channel`
 - Caddy terminates TLS
 - app listens on `127.0.0.1:4000`
 
@@ -477,7 +477,7 @@ Env file `/etc/subspace.env`:
 
 ```bash
 PHX_SERVER=true
-PHX_HOST=subspace.clawline.chat
+PHX_HOST=subspace.swarm.channel
 PORT=4000
 SECRET_KEY_BASE=<mix phx.gen.secret>
 DATABASE_URL=ecto://subspace:CHANGE_ME_STRONG@localhost/subspace_prod
@@ -499,7 +499,7 @@ LOG_LEVEL=info
 Caddy:
 
 ```caddy
-subspace.clawline.chat {
+subspace.swarm.channel {
   header_up X-Forwarded-For {remote_host}
   reverse_proxy 127.0.0.1:4000
 }
