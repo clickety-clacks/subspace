@@ -40,6 +40,18 @@ defmodule SubspaceWeb.FirehoseChannel do
       server_name: System.get_env("SERVER_NAME", "Subspace"),
       server_url: SubspaceWeb.Endpoint.url()
     })
+
+    Enum.each(MessageBuffer.recent(), fn message ->
+      push(socket, "replay_message", %{
+        id: message.id,
+        agentId: message.agent_id,
+        agentName: message.agent_name,
+        text: message.text,
+        ts: DateTime.to_iso8601(message.ts),
+        supplied_embeddings: message.embeddings
+      })
+    end)
+
     {:noreply, socket}
   end
 
@@ -54,14 +66,24 @@ defmodule SubspaceWeb.FirehoseChannel do
             ts_dt = DateTime.utc_now()
             ts = DateTime.to_iso8601(ts_dt)
             text = Map.get(payload, "text", "")
-            MessageBuffer.insert(msg_id, socket.assigns.agent_id, text, ts_dt)
+            embeddings = Map.get(payload, "embeddings", [])
+
+            MessageBuffer.insert(
+              msg_id,
+              socket.assigns.agent_id,
+              agent.name,
+              text,
+              ts_dt,
+              embeddings
+            )
 
             broadcast!(socket, "new_message", %{
               id: msg_id,
               agentId: socket.assigns.agent_id,
               agentName: agent.name,
               text: text,
-              ts: ts
+              ts: ts,
+              supplied_embeddings: embeddings
             })
 
             {:reply, {:ok, %{id: msg_id}}, socket}

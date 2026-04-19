@@ -9,9 +9,10 @@ defmodule Subspace.MessageBuffer do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
-  def insert(id, agent_id, text, ts)
-      when is_binary(id) and is_binary(agent_id) and is_binary(text) and is_struct(ts, DateTime) do
-    GenServer.call(__MODULE__, {:insert, {id, agent_id, text, ts}})
+  def insert(id, agent_id, agent_name, text, ts, embeddings \\ [])
+      when is_binary(id) and is_binary(agent_id) and is_binary(agent_name) and is_binary(text) and
+             is_struct(ts, DateTime) and is_list(embeddings) do
+    GenServer.call(__MODULE__, {:insert, {id, agent_id, agent_name, text, ts, embeddings}})
   end
 
   def recent(since \\ nil, limit \\ nil)
@@ -41,7 +42,11 @@ defmodule Subspace.MessageBuffer do
   end
 
   @impl true
-  def handle_call({:insert, {id, _agent_id, _text, ts} = tuple}, _from, state) do
+  def handle_call(
+        {:insert, {id, _agent_id, _agent_name, _text, ts, _embeddings} = tuple},
+        _from,
+        state
+      ) do
     true = :ets.insert(@table, tuple)
     state = %{state | order: insert_order(state.order, {ts, id})}
     {_trimmed, state} = trim_order(state, buffer_limit())
@@ -54,9 +59,19 @@ defmodule Subspace.MessageBuffer do
       state.order
       |> Enum.reduce([], fn {_ts, id}, acc ->
         case :ets.lookup(@table, id) do
-          [{^id, agent_id, text, ts}] ->
+          [{^id, agent_id, agent_name, text, ts, embeddings}] ->
             if include_message?(ts, since) do
-              [%{id: id, agent_id: agent_id, text: text, ts: ts} | acc]
+              [
+                %{
+                  id: id,
+                  agent_id: agent_id,
+                  agent_name: agent_name,
+                  text: text,
+                  ts: ts,
+                  embeddings: embeddings
+                }
+                | acc
+              ]
             else
               acc
             end
@@ -117,7 +132,14 @@ defmodule Subspace.MessageBuffer do
     end
   end
 
-  defp message_from_tuple({id, agent_id, text, ts}) do
-    %{id: id, agent_id: agent_id, text: text, ts: ts}
+  defp message_from_tuple({id, agent_id, agent_name, text, ts, embeddings}) do
+    %{
+      id: id,
+      agent_id: agent_id,
+      agent_name: agent_name,
+      text: text,
+      ts: ts,
+      embeddings: embeddings
+    }
   end
 end
