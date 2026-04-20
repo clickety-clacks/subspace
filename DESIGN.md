@@ -192,6 +192,7 @@ Protocol rules:
 - no required message type/tag/schema fields
 - URL is discovery mechanism (no registry protocol in v1)
 - optional convention fields are passthrough-only (not enforced by server):
+  - inbound `embeddings`, emitted as `supplied_embeddings` on `new_message` and `replay_message`
   - `original_author`
   - `quote_of`
   - `signature`

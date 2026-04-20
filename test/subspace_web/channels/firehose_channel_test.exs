@@ -51,26 +51,26 @@ defmodule SubspaceWeb.FirehoseChannelTest do
 
     assert_reply ref, :ok, %{id: msg_id}
 
-    assert_broadcast "new_message", %{
-      id: ^msg_id,
-      agentId: ^agent_id,
-      agentName: "sender",
-      text: "wake target",
-      supplied_embeddings: ^embeddings
-    }
+    assert_broadcast "new_message", payload
+    assert payload.id == msg_id
+    assert payload.agentId == agent_id
+    assert payload.agentName == "sender"
+    assert payload.text == "wake target"
+    assert is_binary(payload.ts)
+    assert payload.supplied_embeddings == embeddings
+    refute Map.has_key?(payload, :embeddings)
+
+    assert json_payload(payload)["supplied_embeddings"] == embeddings
+    refute Map.has_key?(json_payload(payload), "embeddings")
 
     assert [%{id: ^msg_id, embeddings: ^embeddings}] = MessageBuffer.recent()
   end
 
-  test "replays buffered messages with sender embeddings", %{agent: agent, socket: socket} do
+  test "replays posted messages with sender embeddings", %{agent: agent, socket: socket} do
     agent_id = agent.agent_id
-    ts = DateTime.utc_now()
     embeddings = [%{"space_id" => "test:space", "vector" => [1.0, 0.0]}]
 
-    {:ok, _message} =
-      MessageBuffer.insert("msg-1", agent_id, "sender", "wake target", ts, embeddings)
-
-    {:ok, _reply, _socket} =
+    {:ok, _reply, socket} =
       subscribe_and_join(socket, "firehose", %{
         "agent_id" => agent_id,
         "session_token" => agent.session_token
@@ -78,15 +78,41 @@ defmodule SubspaceWeb.FirehoseChannelTest do
 
     assert_push "server_hello", %{type: "server_hello"}
 
-    assert_push "replay_message", %{
-      id: "msg-1",
-      agentId: ^agent_id,
-      agentName: "sender",
-      text: "wake target",
-      ts: replay_ts,
-      supplied_embeddings: ^embeddings
-    }
+    ref =
+      push(socket, "post_message", %{
+        "text" => "wake target",
+        "embeddings" => embeddings
+      })
 
-    assert replay_ts == DateTime.to_iso8601(ts)
+    assert_reply ref, :ok, %{id: msg_id}
+    assert_broadcast "new_message", %{id: ^msg_id}
+
+    {:ok, replay_socket} = connect(FirehoseSocket, %{})
+
+    {:ok, _reply, _socket} =
+      subscribe_and_join(replay_socket, "firehose", %{
+        "agent_id" => agent_id,
+        "session_token" => agent.session_token
+      })
+
+    assert_push "server_hello", %{type: "server_hello"}
+
+    assert_push "replay_message", replay_payload
+    assert replay_payload.id == msg_id
+    assert replay_payload.agentId == agent_id
+    assert replay_payload.agentName == "sender"
+    assert replay_payload.text == "wake target"
+    assert is_binary(replay_payload.ts)
+    assert replay_payload.supplied_embeddings == embeddings
+    refute Map.has_key?(replay_payload, :embeddings)
+
+    assert json_payload(replay_payload)["supplied_embeddings"] == embeddings
+    refute Map.has_key?(json_payload(replay_payload), "embeddings")
+  end
+
+  defp json_payload(payload) do
+    payload
+    |> Jason.encode!()
+    |> Jason.decode!()
   end
 end
