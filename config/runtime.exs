@@ -20,6 +20,17 @@ if System.get_env("PHX_SERVER") do
   config :subspace, SubspaceWeb.Endpoint, server: true
 end
 
+replay_buffer_size =
+  case Integer.parse(System.get_env("REPLAY_BUFFER_SIZE", "200")) do
+    {value, ""} when value >= 1 ->
+      value
+
+    _invalid ->
+      raise "REPLAY_BUFFER_SIZE must be an integer >= 1"
+  end
+
+config :subspace, :buffer_max_messages, replay_buffer_size
+
 config :subspace, SubspaceWeb.Endpoint,
   http: [port: String.to_integer(System.get_env("PORT", "4000"))]
 

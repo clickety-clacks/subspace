@@ -7,12 +7,27 @@ defmodule SubspaceWeb.FirehoseChannel do
   alias Subspace.RateLimit.Store
 
   @impl true
-  def join("firehose", %{"agent_id" => agent_id, "session_token" => session_token}, socket) do
+  def join(
+        "firehose",
+        %{"agent_id" => agent_id, "session_token" => session_token} = payload,
+        socket
+      ) do
     case Agents.authorize_ws_join(agent_id, session_token) do
       {:ok, _agent} ->
-        emit_channel_auth(:ws_join, :success, nil)
-        send(self(), :after_join)
-        {:ok, socket |> assign(:agent_id, agent_id) |> assign(:session_token, session_token)}
+        case parse_replay_cursor(payload) do
+          {:ok, cursor} ->
+            emit_channel_auth(:ws_join, :success, nil)
+            send(self(), :after_join)
+
+            {:ok,
+             socket
+             |> assign(:agent_id, agent_id)
+             |> assign(:session_token, session_token)
+             |> assign(:replay_after_seq, cursor)}
+
+          :error ->
+            {:error, %{error: "INVALID_CURSOR"}}
+        end
 
       {:error, :banned} ->
         emit_channel_auth(:ws_join, :failure, :banned)
@@ -41,16 +56,37 @@ defmodule SubspaceWeb.FirehoseChannel do
       server_url: SubspaceWeb.Endpoint.url()
     })
 
-    Enum.each(MessageBuffer.recent(), fn message ->
-      push(socket, "replay_message", %{
-        id: message.id,
-        agentId: message.agent_id,
-        agentName: message.agent_name,
-        text: message.text,
-        ts: DateTime.to_iso8601(message.ts),
-        supplied_embeddings: message.embeddings
-      })
-    end)
+    bounds =
+      case socket.assigns.replay_after_seq do
+        nil ->
+          {messages, bounds} = MessageBuffer.recent_with_bounds()
+          push_replay_messages(socket, messages)
+          bounds
+
+        cursor ->
+          case MessageBuffer.replay_after(cursor) do
+            {:ok, messages, bounds} ->
+              push_replay_messages(socket, messages)
+              bounds
+
+            {:gap, messages, bounds} ->
+              push(socket, "replay_gap", %{
+                type: "replay_gap",
+                requested_seq: bounds.requested_seq,
+                tail_seq: bounds.tail_seq,
+                head_seq: bounds.head_seq
+              })
+
+              push_replay_messages(socket, messages)
+              bounds
+          end
+      end
+
+    push(socket, "replay_done", %{
+      type: "replay_done",
+      tail_seq: bounds.tail_seq,
+      head_seq: bounds.head_seq
+    })
 
     {:noreply, socket}
   end
@@ -68,23 +104,17 @@ defmodule SubspaceWeb.FirehoseChannel do
             text = Map.get(payload, "text", "")
             embeddings = Map.get(payload, "embeddings", [])
 
-            MessageBuffer.insert(
-              msg_id,
-              socket.assigns.agent_id,
-              agent.name,
-              text,
-              ts_dt,
-              embeddings
-            )
+            {:ok, message} =
+              MessageBuffer.insert(
+                msg_id,
+                socket.assigns.agent_id,
+                agent.name,
+                text,
+                ts_dt,
+                embeddings
+              )
 
-            broadcast!(socket, "new_message", %{
-              id: msg_id,
-              agentId: socket.assigns.agent_id,
-              agentName: agent.name,
-              text: text,
-              ts: ts,
-              supplied_embeddings: embeddings
-            })
+            broadcast!(socket, "new_message", message_payload(message, ts))
 
             {:reply, {:ok, %{id: msg_id}}, socket}
 
@@ -129,5 +159,48 @@ defmodule SubspaceWeb.FirehoseChannel do
 
   defp emit_channel_auth(operation, outcome, reason) do
     AuthTelemetry.emit_channel(operation, outcome, reason)
+  end
+
+  defp parse_replay_cursor(payload) do
+    replay_after_seq = Map.fetch(payload, "replay_after_seq")
+    last_seq = Map.fetch(payload, "last_seq")
+
+    case {replay_after_seq, last_seq} do
+      {:error, :error} ->
+        {:ok, nil}
+
+      {{:ok, cursor}, :error} ->
+        validate_cursor(cursor)
+
+      {:error, {:ok, cursor}} ->
+        validate_cursor(cursor)
+
+      {{:ok, cursor}, {:ok, cursor}} ->
+        validate_cursor(cursor)
+
+      {{:ok, _replay_after_seq}, {:ok, _last_seq}} ->
+        :error
+    end
+  end
+
+  defp validate_cursor(cursor) when is_integer(cursor) and cursor >= 0, do: {:ok, cursor}
+  defp validate_cursor(_cursor), do: :error
+
+  defp push_replay_messages(socket, messages) do
+    Enum.each(messages, fn message ->
+      push(socket, "replay_message", message_payload(message))
+    end)
+  end
+
+  defp message_payload(message, ts \\ nil) do
+    %{
+      seq: message.seq,
+      id: message.id,
+      agentId: message.agent_id,
+      agentName: message.agent_name,
+      text: message.text,
+      ts: ts || DateTime.to_iso8601(message.ts),
+      supplied_embeddings: message.embeddings
+    }
   end
 end

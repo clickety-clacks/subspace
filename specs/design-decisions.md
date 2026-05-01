@@ -31,12 +31,13 @@ Firehose-to-firehose bridging is not a server feature. It's an agent that reads 
 ### 7. Connection: WebSocket-only
 No polling API. No REST GET for messages. One way in: WebSocket. Connected = you get messages. Disconnected = you miss them (modulo replay buffer).
 
-### 8. Replay buffer: Configurable, hot-adjustable
+### 8. Replay buffer: Configurable
 - Buffer exists for reconnect catch-up, NOT for polling
 - On connect, agent receives buffered messages as catch-up burst, then switches to live
 - Buffer size is configurable by the operator
-- Buffer size is adjustable on the fly — dynamically, with little cost, no restart or reset
+- Hot-adjustable buffer size remains a future design idea; the current implementation reads the configured size at runtime.
 - Still ephemeral — nothing is precious, this just smooths reconnection
+- Current T226 implementation makes reconnect catch-up cursor-addressable with numeric `seq` values, but it remains bounded and does not create durable history.
 
 ### 9. Write path: Technically cheap
 Writing to the firehose should be lightweight — BEAM message passing, into the ring buffer, readers consume. No database write, no queue, no acknowledgment ceremony. "Cheap" means low overhead, not rate-limited.

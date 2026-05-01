@@ -23,6 +23,18 @@ defmodule Subspace.MessageBuffer do
     GenServer.call(__MODULE__, {:recent, since, limit})
   end
 
+  def recent_with_bounds do
+    GenServer.call(__MODULE__, :recent_with_bounds)
+  end
+
+  def replay_after(seq) when is_integer(seq) and seq >= 0 do
+    GenServer.call(__MODULE__, {:replay_after, seq})
+  end
+
+  def bounds do
+    GenServer.call(__MODULE__, :bounds)
+  end
+
   def trim_to_limit(limit) when is_integer(limit) and limit >= 0 do
     GenServer.call(__MODULE__, {:trim_to_limit, limit})
   end
@@ -38,52 +50,56 @@ defmodule Subspace.MessageBuffer do
   @impl true
   def init(_opts) do
     table = :ets.new(@table, [:named_table, :set, :protected, read_concurrency: true])
-    {:ok, %{table: table, order: []}}
+    {:ok, %{table: table, order: [], head_seq: 0, tail_seq: 1}}
   end
 
   @impl true
   def handle_call(
-        {:insert, {id, _agent_id, _agent_name, _text, ts, _embeddings} = tuple},
+        {:insert, {id, agent_id, agent_name, text, ts, embeddings}},
         _from,
         state
       ) do
+    seq = state.head_seq + 1
+    tuple = {id, seq, agent_id, agent_name, text, ts, embeddings}
     true = :ets.insert(@table, tuple)
-    state = %{state | order: insert_order(state.order, {ts, id})}
+
+    state = %{state | order: state.order ++ [{seq, id}], head_seq: seq}
     {_trimmed, state} = trim_order(state, buffer_limit())
 
     {:reply, {:ok, message_from_tuple(tuple)}, state}
   end
 
   def handle_call({:recent, since, limit}, _from, state) do
-    messages =
-      state.order
-      |> Enum.reduce([], fn {_ts, id}, acc ->
-        case :ets.lookup(@table, id) do
-          [{^id, agent_id, agent_name, text, ts, embeddings}] ->
-            if include_message?(ts, since) do
-              [
-                %{
-                  id: id,
-                  agent_id: agent_id,
-                  agent_name: agent_name,
-                  text: text,
-                  ts: ts,
-                  embeddings: embeddings
-                }
-                | acc
-              ]
-            else
-              acc
-            end
-
-          [] ->
-            acc
-        end
-      end)
-      |> Enum.reverse()
-      |> limit_recent(limit)
+    messages = recent_messages(state, since, limit)
 
     {:reply, messages, state}
+  end
+
+  def handle_call(:recent_with_bounds, _from, state) do
+    {:reply, {recent_messages(state, nil, buffer_limit()), bounds_from_state(state)}, state}
+  end
+
+  def handle_call({:replay_after, seq}, _from, state) do
+    bounds = bounds_from_state(state)
+    messages = messages_after(state, seq)
+
+    cond do
+      state.head_seq == 0 and state.order == [] ->
+        {:reply, {:ok, [], bounds}, state}
+
+      state.order == [] and seq < state.head_seq ->
+        {:reply, {:gap, [], Map.put(bounds, :requested_seq, seq)}, state}
+
+      state.order != [] and (seq > state.head_seq or seq < state.tail_seq - 1) ->
+        {:reply, {:gap, messages_after(state, 0), Map.put(bounds, :requested_seq, seq)}, state}
+
+      true ->
+        {:reply, {:ok, messages, bounds}, state}
+    end
+  end
+
+  def handle_call(:bounds, _from, state) do
+    {:reply, bounds_from_state(state), state}
   end
 
   def handle_call({:trim_to_limit, limit}, _from, state) do
@@ -93,34 +109,54 @@ defmodule Subspace.MessageBuffer do
 
   def handle_call(:clear, _from, state) do
     :ets.delete_all_objects(@table)
-    {:reply, :ok, %{state | order: []}}
-  end
-
-  defp insert_order([], entry), do: [entry]
-
-  defp insert_order(order, {ts, id} = entry) do
-    {left, right} =
-      Enum.split_while(order, fn {existing_ts, existing_id} ->
-        DateTime.compare(existing_ts, ts) != :gt and
-          not (DateTime.compare(existing_ts, ts) == :eq and existing_id > id)
-      end)
-
-    left ++ [entry | right]
+    {:reply, :ok, %{state | order: [], head_seq: 0, tail_seq: 1}}
   end
 
   defp trim_order(state, limit) do
     excess = max(length(state.order) - limit, 0)
     {to_drop, keep} = Enum.split(state.order, excess)
 
-    Enum.each(to_drop, fn {_ts, id} ->
+    Enum.each(to_drop, fn {_seq, id} ->
       :ets.delete(@table, id)
     end)
 
-    {length(to_drop), %{state | order: keep}}
+    state = %{state | order: keep, tail_seq: tail_seq(state.head_seq, keep)}
+
+    {length(to_drop), state}
   end
 
   defp include_message?(_ts, nil), do: true
   defp include_message?(ts, since), do: DateTime.compare(ts, since) == :gt
+
+  defp recent_messages(state, since, limit) do
+    state.order
+    |> Enum.reduce([], fn {_seq, id}, acc ->
+      case :ets.lookup(@table, id) do
+        [{^id, seq, agent_id, agent_name, text, ts, embeddings}] ->
+          if include_message?(ts, since) do
+            [
+              %{
+                seq: seq,
+                id: id,
+                agent_id: agent_id,
+                agent_name: agent_name,
+                text: text,
+                ts: ts,
+                embeddings: embeddings
+              }
+              | acc
+            ]
+          else
+            acc
+          end
+
+        [] ->
+          acc
+      end
+    end)
+    |> Enum.reverse()
+    |> limit_recent(limit)
+  end
 
   defp limit_recent(messages, limit) do
     count = length(messages)
@@ -132,8 +168,25 @@ defmodule Subspace.MessageBuffer do
     end
   end
 
-  defp message_from_tuple({id, agent_id, agent_name, text, ts, embeddings}) do
+  defp messages_after(state, seq) do
+    state.order
+    |> Enum.filter(fn {message_seq, _id} -> message_seq > seq end)
+    |> Enum.flat_map(fn {_message_seq, id} ->
+      case :ets.lookup(@table, id) do
+        [tuple] -> [message_from_tuple(tuple)]
+        [] -> []
+      end
+    end)
+  end
+
+  defp bounds_from_state(state), do: %{tail_seq: state.tail_seq, head_seq: state.head_seq}
+
+  defp tail_seq(head_seq, []), do: head_seq + 1
+  defp tail_seq(_head_seq, [{seq, _id} | _rest]), do: seq
+
+  defp message_from_tuple({id, seq, agent_id, agent_name, text, ts, embeddings}) do
     %{
+      seq: seq,
       id: id,
       agent_id: agent_id,
       agent_name: agent_name,
