@@ -59,7 +59,13 @@ defmodule Subspace.Agents do
             |> case do
               {:ok, agent} ->
                 {:ok,
-                 %{agent_id: agent.agent_id, session_token: token, name: agent.name, owner: agent.owner}}
+                 %{
+                   agent_id: agent.agent_id,
+                   session_token: token,
+                   session_expires_at: session_expires_at(agent.session_token_issued_at),
+                   name: agent.name,
+                   owner: agent.owner
+                 }}
 
               {:error, _changeset} ->
                 {:error, :invalid_input}
@@ -82,7 +88,13 @@ defmodule Subspace.Agents do
           |> case do
             {:ok, agent} ->
               {:ok,
-               %{agent_id: agent.agent_id, session_token: token, name: agent.name, owner: agent.owner}}
+               %{
+                 agent_id: agent.agent_id,
+                 session_token: token,
+                 session_expires_at: session_expires_at(agent.session_token_issued_at),
+                 name: agent.name,
+                 owner: agent.owner
+               }}
 
             {:error, %Changeset{}} ->
               {:error, :already_registered}
@@ -140,8 +152,16 @@ defmodule Subspace.Agents do
       |> Agent.reauth_changeset(%{session_token: token, session_token_issued_at: now})
       |> Repo.update()
       |> case do
-        {:ok, updated_agent} -> {:ok, %{agent_id: updated_agent.agent_id, session_token: token}}
-        {:error, _changeset} -> {:error, :invalid_input}
+        {:ok, updated_agent} ->
+          {:ok,
+           %{
+             agent_id: updated_agent.agent_id,
+             session_token: token,
+             session_expires_at: session_expires_at(updated_agent.session_token_issued_at)
+           }}
+
+        {:error, _changeset} ->
+          {:error, :invalid_input}
       end
     else
       nil -> {:error, :not_found}
@@ -266,8 +286,18 @@ defmodule Subspace.Agents do
   defp token_expired?(nil), do: true
 
   defp token_expired?(issued_at) do
-    ttl = Config.session_token_ttl_secs()
-    DateTime.diff(now_utc(), issued_at, :second) > ttl
+    DateTime.compare(now_utc(), session_expires_at_datetime(issued_at)) != :lt
+  end
+
+  defp session_expires_at(issued_at) do
+    issued_at
+    |> session_expires_at_datetime()
+    |> DateTime.to_iso8601()
+  end
+
+  defp session_expires_at_datetime(issued_at) do
+    issued_at
+    |> DateTime.add(Config.session_token_ttl_secs(), :second)
   end
 
   defp ensure_challenge_table! do

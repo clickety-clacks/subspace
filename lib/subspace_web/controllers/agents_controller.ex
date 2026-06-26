@@ -37,6 +37,7 @@ defmodule SubspaceWeb.AgentsController do
         |> json(%{
           agentId: result.agent_id,
           sessionToken: result.session_token,
+          sessionExpiresAt: result.session_expires_at,
           name: result.name,
           owner: result.owner
         })
@@ -76,7 +77,11 @@ defmodule SubspaceWeb.AgentsController do
       {:ok, result} ->
         conn
         |> put_status(200)
-        |> json(%{agentId: result.agent_id, sessionToken: result.session_token})
+        |> json(%{
+          agentId: result.agent_id,
+          sessionToken: result.session_token,
+          sessionExpiresAt: result.session_expires_at
+        })
 
       {:error, reason} ->
         error_response(conn, reason)
