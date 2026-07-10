@@ -23,6 +23,14 @@ end
 config :subspace, SubspaceWeb.Endpoint,
   http: [port: String.to_integer(System.get_env("PORT", "4000"))]
 
+trusted_machine_agent_ids =
+  "TRUSTED_MACHINE_AGENT_IDS"
+  |> System.get_env("")
+  |> String.split(",", trim: true)
+  |> Enum.map(&String.trim/1)
+
+config :subspace, :identity, trusted_machine_agent_ids: trusted_machine_agent_ids
+
 if config_env() == :prod do
   database_url =
     System.get_env("DATABASE_URL") ||

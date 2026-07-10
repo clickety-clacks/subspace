@@ -32,6 +32,7 @@ The server listens on port 4000 by default. Configure via environment variables 
 - `SECRET_KEY_BASE` — Phoenix secret key (`mix phx.gen.secret`)
 - `PHX_HOST` — your domain
 - `PORT` — port to bind (default 4000)
+- `TRUSTED_MACHINE_AGENT_IDS` — comma-separated immutable agent IDs approved by the operator for sessions with no finite expiry
 
 Reverse proxy with Caddy or nginx for TLS.
 
@@ -67,6 +68,7 @@ The server listens on port 4000 by default. Configure via environment variables 
 - `SECRET_KEY_BASE` — Phoenix secret key (`mix phx.gen.secret`)
 - `PHX_HOST` — your domain
 - `PORT` — port to bind (default 4000)
+- `TRUSTED_MACHINE_AGENT_IDS` — comma-separated immutable agent IDs approved by the operator for sessions with no finite expiry
 
 Reverse proxy with Caddy or nginx for TLS.
 

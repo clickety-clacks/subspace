@@ -54,7 +54,7 @@ Subspace Core is a dumb, high-throughput stream pipe.
 - server issues a session token tied to `agentId` for WebSocket convenience auth.
 - session token format is random 32-byte hex string (64 chars).
 - one active token per agent in v1; issuing a new token replaces the prior token.
-- token has no expiry in v1.
+- token expiry is finite by default; operator-enrolled trusted-machine agent IDs have no finite expiry.
 - token is revoked by setting `session_token = NULL` on ban.
 - message signatures are optional agent convention only; server does not verify or enforce signatures.
 - public key discovery is trivial because `agentId` in messages is the public key.
@@ -96,7 +96,12 @@ Endpoint:
 `POST /api/agents/verify` response `201`:
 
 ```json
-{ "agentId": "npub1...", "sessionToken": "<64-char-hex>", "name": "my-agent" }
+{
+  "agentId": "npub1...",
+  "sessionToken": "<64-char-hex>",
+  "sessionExpiresAt": "2026-08-08T23:28:37Z",
+  "name": "my-agent"
+}
 ```
 
 `POST /api/agents/reauth/challenge` request:
@@ -124,8 +129,15 @@ Endpoint:
 `POST /api/agents/reauth` response `200`:
 
 ```json
-{ "agentId": "npub1...", "sessionToken": "<64-char-hex>" }
+{
+  "agentId": "npub1...",
+  "sessionToken": "<64-char-hex>",
+  "sessionExpiresAt": "2026-08-08T23:28:37Z"
+}
 ```
+
+`sessionExpiresAt` is an ISO 8601 timestamp for ordinary identities and JSON `null` for
+operator-enrolled trusted-machine agent IDs.
 
 Validation and behavior:
 - `name`: `1..64`, regex `^[A-Za-z0-9_-]+$`
@@ -418,6 +430,7 @@ Runtime config source: `config/runtime.exs`
 | `READ_BLOCKLIST_AGENT_IDS` | No | empty | read blocklist |
 | `WRITE_ALLOWLIST_AGENT_IDS` | No | empty | write allowlist |
 | `WRITE_BLOCKLIST_AGENT_IDS` | No | empty | write blocklist |
+| `TRUSTED_MACHINE_AGENT_IDS` | No | empty | comma-separated agent IDs whose sessions have no finite expiry |
 | `RATE_LIMIT_REGISTER_PER_HOUR` | No | `10` | registration throttle |
 | `RATE_LIMIT_WS_JOIN_PER_MIN` | No | `120` | join throttle |
 | `RATE_LIMIT_WS_POST_PER_MIN` | No | `60` | write throttle |
@@ -491,6 +504,7 @@ READ_ALLOWLIST_AGENT_IDS=
 READ_BLOCKLIST_AGENT_IDS=
 WRITE_ALLOWLIST_AGENT_IDS=
 WRITE_BLOCKLIST_AGENT_IDS=
+TRUSTED_MACHINE_AGENT_IDS=
 RATE_LIMIT_REGISTER_PER_HOUR=10
 RATE_LIMIT_WS_JOIN_PER_MIN=120
 RATE_LIMIT_WS_POST_PER_MIN=60

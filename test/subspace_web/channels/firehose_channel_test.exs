@@ -4,6 +4,7 @@ defmodule SubspaceWeb.FirehoseChannelTest do
   import Phoenix.ChannelTest
 
   alias Subspace.Agents.Agent
+  alias Subspace.Identity.Config
   alias Subspace.MessageBuffer
   alias Subspace.RateLimit.Store
   alias Subspace.Repo
@@ -108,6 +109,69 @@ defmodule SubspaceWeb.FirehoseChannelTest do
 
     assert json_payload(replay_payload)["supplied_embeddings"] == embeddings
     refute Map.has_key?(json_payload(replay_payload), "embeddings")
+  end
+
+  test "trusted session age bypass preserves exact channel auth errors", %{
+    agent: agent,
+    socket: socket
+  } do
+    identity_config = Application.get_env(:subspace, :identity, [])
+
+    Application.put_env(
+      :subspace,
+      :identity,
+      Keyword.put(identity_config, :trusted_machine_agent_ids, [agent.agent_id])
+    )
+
+    on_exit(fn -> Application.put_env(:subspace, :identity, identity_config) end)
+
+    old_issued_at =
+      DateTime.add(DateTime.utc_now(), -Config.session_token_ttl_secs() - 1, :second)
+
+    agent =
+      agent
+      |> Ecto.Changeset.change(session_token_issued_at: old_issued_at)
+      |> Repo.update!()
+
+    assert {:ok, _reply, _socket} =
+             subscribe_and_join(socket, "firehose", %{
+               "agent_id" => agent.agent_id,
+               "session_token" => agent.session_token
+             })
+
+    assert_push "server_hello", %{type: "server_hello"}
+
+    {:ok, malformed_socket} = connect(FirehoseSocket, %{})
+
+    assert {:error, %{error: "TOKEN_INVALID"}} =
+             subscribe_and_join(malformed_socket, "firehose", %{
+               "agent_id" => agent.agent_id,
+               "session_token" => "malformed"
+             })
+
+    agent
+    |> Ecto.Changeset.change(session_token: nil)
+    |> Repo.update!()
+
+    {:ok, revoked_socket} = connect(FirehoseSocket, %{})
+
+    assert {:error, %{error: "TOKEN_REVOKED"}} =
+             subscribe_and_join(revoked_socket, "firehose", %{
+               "agent_id" => agent.agent_id,
+               "session_token" => agent.session_token
+             })
+
+    agent
+    |> Ecto.Changeset.change(banned_at: DateTime.utc_now())
+    |> Repo.update!()
+
+    {:ok, banned_socket} = connect(FirehoseSocket, %{})
+
+    assert {:error, %{error: "BANNED"}} =
+             subscribe_and_join(banned_socket, "firehose", %{
+               "agent_id" => agent.agent_id,
+               "session_token" => agent.session_token
+             })
   end
 
   defp json_payload(payload) do

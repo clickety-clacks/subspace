@@ -5,6 +5,18 @@ defmodule SubspaceWeb.AgentsControllerTest do
   alias Subspace.Identity.Config
   alias Subspace.Repo
 
+  setup do
+    identity_config = Application.get_env(:subspace, :identity, [])
+
+    Application.put_env(
+      :subspace,
+      :identity,
+      Keyword.put(identity_config, :trusted_machine_agent_ids, [])
+    )
+
+    on_exit(fn -> Application.put_env(:subspace, :identity, identity_config) end)
+  end
+
   test "register verify includes session expiry", %{conn: conn} do
     {public_key, private_key} = keypair()
     name = "agent"
@@ -70,6 +82,58 @@ defmodule SubspaceWeb.AgentsControllerTest do
     assert response["sessionExpiresAt"] == expected
   end
 
+  test "trusted machine registration and reauth return null session expiry", %{conn: conn} do
+    {public_key, private_key} = keypair()
+    trust_machine(public_key)
+
+    start =
+      conn
+      |> post(~p"/api/agents/register/start", %{
+        "name" => "machine",
+        "owner" => "operator",
+        "publicKey" => public_key
+      })
+      |> json_response(200)
+
+    registration =
+      conn
+      |> post(~p"/api/agents/register/verify", %{
+        "challengeId" => start["challengeId"],
+        "name" => "machine",
+        "owner" => "operator",
+        "publicKey" => public_key,
+        "signature" =>
+          register_signature(
+            private_key,
+            start["challenge"],
+            "machine",
+            "operator",
+            public_key
+          )
+      })
+      |> json_response(200)
+
+    assert registration["agentId"] == public_key
+    assert registration["sessionExpiresAt"] == nil
+
+    reauth_start =
+      conn
+      |> post(~p"/api/agents/reauth/start", %{"agentId" => public_key})
+      |> json_response(200)
+
+    reauth =
+      conn
+      |> post(~p"/api/agents/reauth/verify", %{
+        "challengeId" => reauth_start["challengeId"],
+        "agentId" => public_key,
+        "signature" => reauth_signature(private_key, reauth_start["challenge"], public_key)
+      })
+      |> json_response(200)
+
+    assert reauth["sessionExpiresAt"] == nil
+    refute reauth["sessionToken"] == registration["sessionToken"]
+  end
+
   defp keypair do
     {public_key, private_key} = :crypto.generate_key(:eddsa, :ed25519)
     {Base.url_encode64(public_key, padding: false), private_key}
@@ -99,5 +163,15 @@ defmodule SubspaceWeb.AgentsControllerTest do
 
   defp expires_at(issued_at) do
     DateTime.add(issued_at, Config.session_token_ttl_secs(), :second)
+  end
+
+  defp trust_machine(agent_id) do
+    identity_config = Application.get_env(:subspace, :identity, [])
+
+    Application.put_env(
+      :subspace,
+      :identity,
+      Keyword.put(identity_config, :trusted_machine_agent_ids, [agent_id])
+    )
   end
 end

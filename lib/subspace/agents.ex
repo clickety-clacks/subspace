@@ -62,7 +62,7 @@ defmodule Subspace.Agents do
                  %{
                    agent_id: agent.agent_id,
                    session_token: token,
-                   session_expires_at: session_expires_at(agent.session_token_issued_at),
+                   session_expires_at: session_expires_at(agent),
                    name: agent.name,
                    owner: agent.owner
                  }}
@@ -91,7 +91,7 @@ defmodule Subspace.Agents do
                %{
                  agent_id: agent.agent_id,
                  session_token: token,
-                 session_expires_at: session_expires_at(agent.session_token_issued_at),
+                 session_expires_at: session_expires_at(agent),
                  name: agent.name,
                  owner: agent.owner
                }}
@@ -157,7 +157,7 @@ defmodule Subspace.Agents do
            %{
              agent_id: updated_agent.agent_id,
              session_token: token,
-             session_expires_at: session_expires_at(updated_agent.session_token_issued_at)
+             session_expires_at: session_expires_at(updated_agent)
            }}
 
         {:error, _changeset} ->
@@ -189,7 +189,7 @@ defmodule Subspace.Agents do
           agent.session_token != session_token ->
             {:error, :unauthorized}
 
-          token_expired?(agent.session_token_issued_at) ->
+          token_expired?(agent) ->
             {:error, :unauthorized}
 
           true ->
@@ -220,7 +220,7 @@ defmodule Subspace.Agents do
           agent.session_token != session_token ->
             {:error, :token_invalid}
 
-          token_expired?(agent.session_token_issued_at) ->
+          token_expired?(agent) ->
             {:error, :token_revoked}
 
           true ->
@@ -283,16 +283,29 @@ defmodule Subspace.Agents do
     random_hex(32)
   end
 
-  defp token_expired?(nil), do: true
+  defp token_expired?(%Agent{agent_id: agent_id, session_token_issued_at: issued_at})
+       when is_binary(agent_id) do
+    if Config.trusted_machine?(agent_id) do
+      false
+    else
+      token_expired_at?(issued_at)
+    end
+  end
 
-  defp token_expired?(issued_at) do
+  defp token_expired_at?(nil), do: true
+
+  defp token_expired_at?(issued_at) do
     DateTime.compare(now_utc(), session_expires_at_datetime(issued_at)) != :lt
   end
 
-  defp session_expires_at(issued_at) do
-    issued_at
-    |> session_expires_at_datetime()
-    |> DateTime.to_iso8601()
+  defp session_expires_at(%Agent{agent_id: agent_id, session_token_issued_at: issued_at}) do
+    if Config.trusted_machine?(agent_id) do
+      nil
+    else
+      issued_at
+      |> session_expires_at_datetime()
+      |> DateTime.to_iso8601()
+    end
   end
 
   defp session_expires_at_datetime(issued_at) do

@@ -22,6 +22,11 @@ defmodule Subspace.Identity.Config do
 
   def session_token_ttl_secs, do: identity_env(:session_token_ttl_secs, 2_592_000)
   def local_challenge_ttl_secs, do: identity_env(:local_challenge_ttl_secs, 120)
+  def trusted_machine_agent_ids, do: identity_env(:trusted_machine_agent_ids, [])
+
+  def trusted_machine?(agent_id) do
+    agent_id in trusted_machine_agent_ids()
+  end
 
   defp identity_env(key, default \\ nil) do
     :subspace
