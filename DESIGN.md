@@ -247,11 +247,13 @@ Provenance/federation convention:
 
 Auth flow:
 1. receive `agent_id` + `session_token`
-2. load agent row by `public_key`
-3. reject `403 FORBIDDEN` + `TOKEN_INVALID` if token malformed/unknown/subject-mismatch
-4. reject `403 FORBIDDEN` + `TOKEN_REVOKED` if token is revoked (or expired in future versions)
-5. reject `403` if banned
-6. proceed with authorized session context
+2. load agent row by `agent_id`; reject `TOKEN_INVALID` if it is unknown
+3. reject `BANNED` if the agent is banned
+4. reject `TOKEN_REVOKED` if the stored token was explicitly cleared
+5. reject `TOKEN_INVALID` if the presented token is malformed or does not exactly match
+6. reject `TOKEN_REVOKED` if an ordinary session reached its finite expiry; trusted-machine
+   sessions have no age cutoff
+7. proceed with authorized session context
 
 ### Authorization (Policy)
 Read policy env:
@@ -427,7 +429,8 @@ HTTP status/code map:
 Auth-specific error codes:
 - `ALREADY_REGISTERED` (registration insert conflict)
 - `TOKEN_INVALID` (missing/malformed/unknown/mismatched token)
-- `TOKEN_REVOKED` (revoked token; also used for expired tokens in future versions)
+- `TOKEN_REVOKED` (explicitly cleared token or expired ordinary-identity token)
+- `BANNED` (banned agent; evaluated before token state for a known identity)
 
 Phoenix modules:
 - `SubspaceWeb.FallbackController`
