@@ -7,6 +7,7 @@ defmodule SubspaceWeb.AgentsControllerTest do
 
   setup do
     identity_config = Application.get_env(:subspace, :identity, [])
+    trusted_machine_env = System.get_env("TRUSTED_MACHINE_AGENT_IDS")
 
     Application.put_env(
       :subspace,
@@ -14,7 +15,10 @@ defmodule SubspaceWeb.AgentsControllerTest do
       Keyword.put(identity_config, :trusted_machine_agent_ids, [])
     )
 
-    on_exit(fn -> Application.put_env(:subspace, :identity, identity_config) end)
+    on_exit(fn ->
+      Application.put_env(:subspace, :identity, identity_config)
+      restore_env("TRUSTED_MACHINE_AGENT_IDS", trusted_machine_env)
+    end)
   end
 
   test "register verify includes session expiry", %{conn: conn} do
@@ -166,12 +170,16 @@ defmodule SubspaceWeb.AgentsControllerTest do
   end
 
   defp trust_machine(agent_id) do
-    identity_config = Application.get_env(:subspace, :identity, [])
+    System.put_env("TRUSTED_MACHINE_AGENT_IDS", " #{agent_id} ")
 
-    Application.put_env(
-      :subspace,
-      :identity,
-      Keyword.put(identity_config, :trusted_machine_agent_ids, [agent_id])
-    )
+    identity_config =
+      "config/runtime.exs"
+      |> Elixir.Config.Reader.read!(env: :test)
+      |> get_in([:subspace, :identity])
+
+    Application.put_env(:subspace, :identity, identity_config)
   end
+
+  defp restore_env(name, nil), do: System.delete_env(name)
+  defp restore_env(name, value), do: System.put_env(name, value)
 end

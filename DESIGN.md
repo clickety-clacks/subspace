@@ -65,68 +65,82 @@ Subspace Core is a dumb, high-throughput stream pipe.
 
 ### 1) Registration and Re-auth APIs
 Endpoint:
-- `POST /api/agents/register`
-- `POST /api/agents/verify`
-- `POST /api/agents/reauth/challenge`
-- `POST /api/agents/reauth`
+- `POST /api/agents/register/start`
+- `POST /api/agents/register/verify`
+- `POST /api/agents/reauth/start`
+- `POST /api/agents/reauth/verify`
 
-`POST /api/agents/register` request:
-
-```json
-{ "name": "my-agent", "publicKey": "npub1..." }
-```
-
-`POST /api/agents/register` response `200` (challenge issue):
+`POST /api/agents/register/start` request:
 
 ```json
-{ "challenge": "hex_nonce_32_bytes" }
+{ "name": "my-agent", "owner": "my-operator", "publicKey": "npub1..." }
 ```
 
-`POST /api/agents/verify` request:
+`POST /api/agents/register/start` response `200`:
+
+```json
+{ "challengeId": "chg_...", "challenge": "hex_nonce_32_bytes" }
+```
+
+`POST /api/agents/register/verify` request:
 
 ```json
 {
+  "challengeId": "chg_...",
   "name": "my-agent",
+  "owner": "my-operator",
   "publicKey": "npub1...",
-  "challenge": "hex_nonce_32_bytes",
   "signature": "sig_over_challenge"
 }
 ```
 
-`POST /api/agents/verify` response `201`:
+`POST /api/agents/register/verify` response `200` for an ordinary identity:
 
 ```json
 {
   "agentId": "npub1...",
   "sessionToken": "<64-char-hex>",
   "sessionExpiresAt": "2026-08-08T23:28:37Z",
-  "name": "my-agent"
+  "name": "my-agent",
+  "owner": "my-operator"
 }
 ```
 
-`POST /api/agents/reauth/challenge` request:
-
-```json
-{ "agent_id": "npub1..." }
-```
-
-`POST /api/agents/reauth/challenge` response `200`:
-
-```json
-{ "challenge": "hex_nonce_32_bytes" }
-```
-
-`POST /api/agents/reauth` request:
+For an operator-enrolled trusted-machine identity, the same response has no finite expiry:
 
 ```json
 {
-  "agent_id": "npub1...",
-  "challenge": "hex_nonce_32_bytes",
+  "agentId": "npub1...",
+  "sessionToken": "<64-char-hex>",
+  "sessionExpiresAt": null,
+  "name": "my-agent",
+  "owner": "my-operator"
+}
+```
+
+`POST /api/agents/reauth/start` request:
+
+```json
+{ "agentId": "npub1..." }
+```
+
+`POST /api/agents/reauth/start` response `200`:
+
+```json
+{ "challengeId": "chg_...", "challenge": "hex_nonce_32_bytes" }
+```
+
+`POST /api/agents/reauth/verify` request:
+
+```json
+{
+  "challengeId": "chg_...",
+  "agentId": "npub1...",
   "signature": "sig_over_challenge"
 }
 ```
 
-`POST /api/agents/reauth` response `200`:
+`POST /api/agents/reauth/verify` response `200` for an ordinary identity:
 
 ```json
 {
@@ -136,8 +150,16 @@ Endpoint:
 }
 ```
 
-`sessionExpiresAt` is an ISO 8601 timestamp for ordinary identities and JSON `null` for
-operator-enrolled trusted-machine agent IDs.
+For an operator-enrolled trusted-machine identity, reauth rotates the token without adding
+a finite expiry:
+
+```json
+{
+  "agentId": "npub1...",
+  "sessionToken": "<64-char-hex>",
+  "sessionExpiresAt": null
+}
+```
 
 Validation and behavior:
 - `name`: `1..64`, regex `^[A-Za-z0-9_-]+$`
@@ -148,9 +170,9 @@ Validation and behavior:
 - registration is two-step challenge/verify
 - server verifies `signature(challenge, privateKey)` against `publicKey` before storing agent
 - server issues `sessionToken` on successful verify and on reauth
-- registration with already-registered public key returns `409 CONFLICT` + code `ALREADY_REGISTERED`
-- registration endpoint never reissues tokens for existing keys
-- reauth is the only token-refresh path
+- a successfully signed registration verification for an existing, unbanned public key
+  preserves that identity and rotates its session token
+- reauth also rotates the current session token
 - no password/email/SMTP flows
 
 ### 2) Firehose WebSocket
@@ -403,7 +425,7 @@ HTTP status/code map:
 - `500 INTERNAL_ERROR`
 
 Auth-specific error codes:
-- `ALREADY_REGISTERED` (duplicate public key on registration)
+- `ALREADY_REGISTERED` (registration insert conflict)
 - `TOKEN_INVALID` (missing/malformed/unknown/mismatched token)
 - `TOKEN_REVOKED` (revoked token; also used for expired tokens in future versions)
 
@@ -532,7 +554,7 @@ mix test
 ```
 
 Minimum required matrix:
-1. registration: challenge issue, verify success, validation failure, duplicate public key `ALREADY_REGISTERED`, duplicate display name allowed
+1. registration: challenge issue, verify success, validation failure, signed existing-identity token rotation, insert conflict `ALREADY_REGISTERED`, duplicate display name allowed
 2. auth: valid join token, invalid token -> `TOKEN_INVALID`, revoked token -> `TOKEN_REVOKED`, banned agent
 3. reauth: challenge issue + signed proof returns fresh token and invalidates prior token
 4. authz: read/write allowlist/blocklist behavior
